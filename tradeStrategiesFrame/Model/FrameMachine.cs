@@ -32,23 +32,21 @@ namespace strategiesFrame.Model
             return Trade.createEmpty();
         }
 
-        public override void operate(TradeSignal signal, int start)
+        public void processCandleWithIndex(int start, bool onlyCalculate = false)
         {
-            Candle candle = portfolio.candles[start];
+            TradeSignal signal = createSignalFor(start);
+            
+            Candle candle = portfolio.getCandleFor(start);
             int closeVolume = currentPosition.volume;
 
-            try
-            {
-                base.operate(signal, start);
-            }
-            catch (TradeSignalIgnored e)
-            {
-                return;
-            }
+            closePosition(candle);
+
+            if (signal.isCloseAndOpenPosition())
+                openPosition(candle, signal.direction);
 
             trades.Add(new Trade(candle.date, candle.dateIndex, candle.tradeValue, signal.direction,
                 currentPosition.volume + closeVolume, signal.mode));
-            
+
             averageMoney.Add(new Slice(candle.date, candle.dateIndex, computeCurrentMoney()));
 
             getPortfolio().addAverageMoney(candle.date, candle.dateIndex);
@@ -67,7 +65,7 @@ namespace strategiesFrame.Model
             Slice[] arrMoney = averageMoney.ToArray();
 
             int index = 0;
-            foreach (Candle candle in portfolio.candles)
+            foreach (Candle candle in portfolio.getCandles())
             {
                 String values = candle.dateIndex + ";" + candle.date.ToString("dd.MM.yyyy HH:mm:ss") + ";" +
                                 Math.Round(candle.value, 2) + ";" +
@@ -136,7 +134,7 @@ namespace strategiesFrame.Model
 
         public FramePortfolio getPortfolio()
         {
-            return (FramePortfolio) portfolio;
+            return (FramePortfolio)portfolio;
         }
     }
 }

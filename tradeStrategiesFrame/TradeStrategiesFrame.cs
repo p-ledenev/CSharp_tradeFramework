@@ -18,14 +18,6 @@ namespace strategiesFrame
 {
     internal class TradeStrategiesFrame
     {
-        public static Candle[] siftCandles(List<Candle> candles, double siftStep)
-        {
-            SiftCandlesStrategy siftStrategie = SiftCandlesStrategyFactory.createSiftStrategie(siftStep);
-            List<Candle> sifted = siftStrategie.sift(candles);
-
-            return sifted.ToArray();
-        }
-
         public static List<Candle> readCandles(String fileName)
         {
             DataSource source = DataSourceFactory.createDataSource();
@@ -54,16 +46,18 @@ namespace strategiesFrame
             {
                 foreach (String year in settings.years)
                 {
-                    List<Candle> data =
-                        readCandles("sources\\" + year + "\\" + settings.ticket + "_" + settings.timeFrame + ".txt");
-                    Candle[] candles = siftCandles(data, settings.siftStep);
+                    List<Candle> candles =  readCandles("sources\\" + year + "\\" + settings.ticket + "_" + settings.timeFrame + ".txt");
 
                     CommissionStrategy commissionStrategy =
                         CommissionStrategyFactory.createConstantCommissionStrategy(settings.commission);
 
-                    FramePortfolio portfolio = new FramePortfolio(settings.ticket, commissionStrategy, candles);
+                    SiftCandlesStrategy siftStrategy = SiftCandlesStrategyFactory.createSiftStrategie(settings.siftStep);
+
+                    FramePortfolio portfolio = new FramePortfolio(settings.ticket, commissionStrategy, siftStrategy);
 
                     portfolio.initMachines(settings.decisionStrategyName, settings.depths);
+
+                    portfolio.addCandlesRange(candles);
 
                     portfolio.trade(year);
                 }

@@ -1,17 +1,13 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using alfaMTT.Model;
+using alfaMTT.DataSources;
 using core.Model;
 
 namespace alfaMTT.Alfa
 {
     class Logger
     {
-        public static String infoFile { get; set; }
+        public static String infoFile = "messages.log";
 
         public static void printInfo(DateTime date, String message, bool toScreen = true)
         {
@@ -34,7 +30,7 @@ namespace alfaMTT.Alfa
 
         protected static void writeLog(DateTime date, String message, bool toScreen)
         {
-            StreamWriter file = new StreamWriter(OperateStock.path + infoFile, true);
+            StreamWriter file = new StreamWriter(TradeLogger.path + infoFile, true);
             file.WriteLine(date.ToString("dd.MM.yyyy HH:mm:ss") + " " + message);
             file.Close();
 

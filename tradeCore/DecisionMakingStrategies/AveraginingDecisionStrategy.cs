@@ -1,6 +1,8 @@
 ﻿#region
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using core.AverageConstructors;
 using core.Factories;
 using core.Model;
@@ -52,7 +54,7 @@ namespace core.DecisionMakingStrategies
         {
             AverageConstructor constructor = AverageConstructorFactory.createConstructor();
 
-            derivatives[start].averageValue = constructor.average(machine.getCandles(), start, depth);
+            derivatives[start].averageValue = constructor.average(machine.getCandlesArray(), start, depth);
 
             derivatives[start].derivative = (derivatives[start].averageValue - derivatives[start - 1].averageValue)/
                                             derivatives[start].averageValue;
@@ -73,7 +75,7 @@ namespace core.DecisionMakingStrategies
 
         protected override void init()
         {
-            derivatives = new Derivative[machine.portfolio.candles.Length];
+            derivatives = new Derivative[machine.getCandles().Count];
 
             for (int i = 0; i < derivatives.Length; i++)
                 derivatives[i] = new Derivative();

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using alfaMTT.Alfa;
+using alfaMTT.DataSources;
 using alfaMTT.Model;
 using alfaMTT.Settings;
 
@@ -9,7 +10,7 @@ namespace alfaMTT
 {
     class AlfaMTT
     {
-        public static AlfaDirectGateway initADS()
+        public static TerminalGateway initADS()
         {
             Console.Write("login: ");
             String login = Console.ReadLine();
@@ -17,34 +18,28 @@ namespace alfaMTT
             Console.Write("password: ");
             String password = readPassword();
 
-            AlfaDirectGateway alfaDirectGateway = new AlfaDirectGateway(login, password);
+            TerminalGateway TerminalGateway = new TerminalGateway(login, password);
 
-            return alfaDirectGateway;
+            return TerminalGateway;
         }
 
         public static void Main(string[] args)
         {
-            OperateStock.path = Environment.CurrentDirectory + "\\";
+            TradeLogger.path = Environment.CurrentDirectory + "\\";
 
-            Logger.infoFile = "messages.log";
-            TerminalOrder.operationFile = "operations.log";
-            Ini.iniFile = "init.dat";
-            GPortfolio.traceFile = "trace.prn";
+            TradesProcessor processor = new TradesProcessor
+            {
+                portfolios = PortfolioInitializator.initPortfolios(),
+                terminal = initADS()
+            };
 
-            AlfaDirectGateway.tradeFrom = new TimeSpan(10, 0, 0);
-            AlfaDirectGateway.tradeTo = new TimeSpan(23, 45, 0);
-
-            OperateStock operate = new OperateStock();
-            operate.gPortfolios = Ini.initPortfolio();
-            operate.alfaDirectGateway = initADS();
-
-            TerminalOrder.alfaDirectGateway = operate.alfaDirectGateway;
+            TerminalOrder.terminal = processor.terminal;
             TerminalOrder.maxCheckAttempts = 10;
 
-            operate.printPortfolios();
+            processor.printPortfolios();
 
             Console.WriteLine("Start trade\n");
-            operate.trade();
+            processor.trade();
         }
 
         public static String readPassword()
@@ -53,15 +48,15 @@ namespace alfaMTT
             int[] FILTERED = { 0, 27, 9, 10 /*, 32 space, if you care */ }; // const
 
             var pass = new Stack<char>();
-            char chr = (char)0;
+            char chr;
 
-            while ((chr = System.Console.ReadKey(true).KeyChar) != ENTER)
+            while ((chr = Console.ReadKey(true).KeyChar) != ENTER)
             {
                 if (chr == BACKSP)
                 {
                     if (pass.Count > 0)
                     {
-                        System.Console.Write("\b \b");
+                        Console.Write("\b \b");
                         pass.Pop();
                     }
                 }
@@ -69,19 +64,19 @@ namespace alfaMTT
                 {
                     while (pass.Count > 0)
                     {
-                        System.Console.Write("\b \b");
+                        Console.Write("\b \b");
                         pass.Pop();
                     }
                 }
                 else if (FILTERED.Count(x => chr == x) > 0) { }
                 else
                 {
-                    pass.Push((char)chr);
-                    System.Console.Write("*");
+                    pass.Push(chr);
+                    Console.Write("*");
                 }
             }
 
-            System.Console.WriteLine();
+            Console.WriteLine();
 
             return new String(pass.Reverse().ToArray());
         }

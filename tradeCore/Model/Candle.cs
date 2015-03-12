@@ -41,5 +41,25 @@ namespace core.Model
         {
             return date.TimeOfDay >= from && date.TimeOfDay <= to;
         }
+
+        public DateTime getDate()
+        {
+            return date;
+        }
+
+        public double getTradeValue()
+        {
+            return tradeValue;
+        }
+
+        public int getVolume()
+        {
+            return volume;
+        }
+
+        public String printCandle(String separator = " ")
+        {
+            return date + separator + value;
+        }
     }
 }

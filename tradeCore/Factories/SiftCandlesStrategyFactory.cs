@@ -8,14 +8,14 @@ namespace core.Factories
 {
     public class SiftCandlesStrategyFactory
     {
-        public static SiftCandlesStrategy createSiftStrategie(double siftStep)
+        public static SiftCandlesStrategy createSiftStrategie(double sieveParam)
         {
-            return createMinMaxSiftStrategy(siftStep);
+            return createMinMaxSiftStrategy(sieveParam);
         }
 
-        protected static SiftCandlesStrategy createMinMaxSiftStrategy(double siftStep)
+        protected static SiftCandlesStrategy createMinMaxSiftStrategy(double sieveParam)
         {
-            return new MinMaxSiftStrategy(siftStep);
+            return new MinMaxSiftStrategy(sieveParam);
         }
     }
 }

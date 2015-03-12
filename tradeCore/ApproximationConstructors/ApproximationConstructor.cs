@@ -1,4 +1,5 @@
-﻿using core.Model;
+﻿using System.Collections.Generic;
+using core.Model;
 
 namespace core.ApproximationConstructors
 {

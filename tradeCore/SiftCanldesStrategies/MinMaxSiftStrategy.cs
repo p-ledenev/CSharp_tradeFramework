@@ -11,8 +11,8 @@ namespace core.SiftCanldesStrategies
 {
     internal class MinMaxSiftStrategy : SiftCandlesStrategy
     {
-        public MinMaxSiftStrategy(double siftStep)
-            : base(siftStep)
+        public MinMaxSiftStrategy(double sieveParam)
+            : base(sieveParam)
         {
         }
 
@@ -31,8 +31,8 @@ namespace core.SiftCanldesStrategies
                 if (value.value > maxValue) maxValue = value.value;
                 if (value.value < minValue) minValue = value.value;
 
-                if (sifted.Count > 0 && computeVariance(maxValue, value.value) < siftStep &&
-                    computeVariance(minValue, value.value) < siftStep)
+                if (sifted.Count > 0 && computeVariance(maxValue, value.value) < sieveParam &&
+                    computeVariance(minValue, value.value) < sieveParam)
                     continue;
 
                 value.tradeValue = arrValues[i + 1].value;

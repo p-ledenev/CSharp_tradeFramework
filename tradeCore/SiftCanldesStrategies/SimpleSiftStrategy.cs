@@ -11,8 +11,8 @@ namespace core.SiftCanldesStrategies
 {
     internal class SimpleSiftCandlesStrategy : SiftCandlesStrategy
     {
-        public SimpleSiftCandlesStrategy(double siftStep)
-            : base(siftStep)
+        public SimpleSiftCandlesStrategy(double sieveParam)
+            : base(sieveParam)
         {
         }
 
@@ -27,7 +27,7 @@ namespace core.SiftCanldesStrategies
             {
                 Candle value = arrValues[i];
 
-                if (sifted.Count <= 0 || Math.Abs(lastValue - value.value)/lastValue*100 >= siftStep)
+                if (sifted.Count <= 0 || Math.Abs(lastValue - value.value)/lastValue*100 >= sieveParam)
                 {
                     value.tradeValue = arrValues[i + 1].value;
                     value.dateIndex = sifted.Count() + 1;

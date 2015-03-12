@@ -1,6 +1,7 @@
 ﻿#region
 
 using System;
+using System.Collections.Generic;
 using core.CommissionStrategies;
 using core.DecisionMakingStrategies;
 using core.Factories;
@@ -12,18 +13,21 @@ namespace core.Model
 {
     public abstract class Machine
     {
+        public double initialMoney { get; set; }
         public double currentMoney { get; set; }
         public double maxMoney { get; set; }
         public bool isTrade { get; set; }
         public DecisionStrategy decisionStrategy { get; set; }
         public Position currentPosition { get; set; }
         public int depth { get; set; }
+
         protected Portfolio portfolio;
 
         protected Machine(String decisionStrategyName, double currentMoney, int depth, Portfolio portfolio)
         {
             this.currentMoney = currentMoney;
             this.maxMoney = currentMoney;
+            this.initialMoney = currentMoney;
             this.depth = depth;
 
             isTrade = true;
@@ -37,6 +41,8 @@ namespace core.Model
 
         public abstract Trade getLastTrade();
 
+        public abstract Trade getLastOpenPositionTrade();
+
         public double getCandleValueFor(int start)
         {
             return portfolio.getCandleValueFor(start);
@@ -46,8 +52,6 @@ namespace core.Model
         {
             return portfolio.ticket;
         }
-
-        public abstract Trade getLastOpenPositionTrade();
 
         public double computeCurrentMoney()
         {
@@ -59,76 +63,78 @@ namespace core.Model
             return value + Math.Round(currentPosition.computeSignedValue() / 100000, 2);
         }
 
-        private void closePosition(Candle candle, Position.Direction direction)
+        public void closePosition(Candle candle)
         {
-            if (currentPosition.isEmpty())
+            closePosition(candle.getDate(), candle.getTradeValue());
+        }
+
+        public void closePosition(DateTime date, double tradeValue)
+        {
+            if (currentPosition.isNone())
                 return;
 
-            bool intraday = getLastOpenPositionTrade().isIntradayFor(candle.date);
+            bool intraday = getLastOpenPositionTrade().isIntradayFor(date);
             double commission =
                 portfolio.computeClosePositionCommission(new CommissionRequest(currentPosition.tradeValue,
                     currentPosition.volume, intraday));
 
-            currentMoney += currentPosition.computeSignedValue(candle.tradeValue) - commission;
+            currentMoney += currentPosition.computeSignedValue(tradeValue) - commission;
 
             currentPosition = new Position();
         }
 
-        private void openPosition(Candle candle, Position.Direction direction)
+        public void openPosition(Candle candle, Position.Direction direction)
         {
-            if (!currentPosition.isEmpty())
+            double tradeValue = candle.getTradeValue();
+            int volume = (int)Math.Floor(currentMoney / tradeValue);
+
+            openPosition(direction, volume, tradeValue);
+        }
+
+        public void openPosition(Position.Direction direction, int volume, double tradeValue)
+        {
+            if (!currentPosition.isNone())
                 return;
 
-            int volume = (int)Math.Floor(currentMoney / candle.tradeValue);
-            currentPosition = new Position(candle.tradeValue, direction, volume);
+            currentPosition = new Position(tradeValue, direction, volume);
 
-            double commission = portfolio.computeOpenPositionCommission(new CommissionRequest(candle.tradeValue, volume, false));
+            double commission = portfolio.computeOpenPositionCommission(new CommissionRequest(tradeValue, volume, false));
 
             currentMoney -= currentPosition.computeSignedValue() + commission;
         }
 
-        public virtual void operate(TradeSignal signal, int start) 
+        public TradeSignal createSignalFor(int start, bool onlyCalculate = false)
         {
+            TradeSignal signal = decisionStrategy.tradeSignalFor(start);
+
+            if (onlyCalculate)
+                throw new TradeSignalIgnored();
+
             if (signal.isNoneDirection())
                 throw new TradeSignalIgnored();
 
             if (currentPosition.isSameDirectionAs(signal.direction))
                 throw new TradeSignalIgnored();
 
-            if (currentPosition.isEmpty() && signal.isClosePosition())
+            if (currentPosition.isNone() && signal.isClosePosition())
                 throw new TradeSignalIgnored();
 
-            Candle candle = portfolio.candles[start];
-
-            closePosition(candle, signal.direction);
-
-            if (signal.isCloseAndOpenPosition())
-                openPosition(candle, signal.direction);
+            return signal;
         }
 
-        public void trade(int start, bool onlyCalculate)
+        public List<Candle> getCandles()
         {
-            TradeSignal signal = decisionStrategy.tradeSignalFor(start);
-
-            if (!onlyCalculate)
-                operate(signal, start);
-
-            if (portfolio.isDayChanged(start))
-                Console.WriteLine(portfolio.ticket + ": depth: " + depth + "; " +
-                                  portfolio.candles[start].printDescription() + " " + portfolio.candles[start].date +
-                                  " " + DateTime.Now);
+            return portfolio.getCandles();
         }
 
-
-
-        public Candle[] getCandles()
+        public Candle[] getCandlesArray()
         {
-            return portfolio.candles;
+            return getCandles().ToArray();
         }
 
         public int getCandlesLength()
         {
-            return portfolio.candles.Length;
+            return portfolio.getCandles().Count;
         }
 
         public void addCandleRequisite(String key, String value, int start)
@@ -145,6 +151,28 @@ namespace core.Model
         public double getDepth()
         {
             return depth;
+        }
+
+        public Position.Direction getPositionDirection()
+        {
+            return currentPosition.direction;
+        }
+
+        public double getPositionValue()
+        {
+            return currentPosition.tradeValue;
+        }
+
+        public int getPositionVolume()
+        {
+            return currentPosition.volume;
+        }
+
+        public void setPosition(Position.Direction direction, double value, int volume)
+        {
+            currentPosition.direction = direction;
+            currentPosition.tradeValue = value;
+            currentPosition.volume = volume;
         }
     }
 }

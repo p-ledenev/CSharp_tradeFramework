@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using core.CommissionStrategies;
 using core.Model;
+using core.SiftCanldesStrategies;
 
 namespace strategiesFrame.Model
 {
@@ -14,8 +15,8 @@ namespace strategiesFrame.Model
 
         public List<Slice> averageMoney { get; set; }
 
-        public FramePortfolio(string ticket, CommissionStrategy commissionStrategy, Candle[] candles)
-            : base(ticket, commissionStrategy, candles)
+        public FramePortfolio(string ticket, CommissionStrategy commissionStrategy, SiftCandlesStrategy siftStrategy)
+            : base(ticket, commissionStrategy, siftStrategy)
         {
             averageMoney = new List<Slice>();
         }
@@ -135,9 +136,9 @@ namespace strategiesFrame.Model
                 averageMoney.Add(slice);
         }
 
-        public override void trade(String year)
+        public void trade(String year)
         {
-            for (int i = 0; i < candles.Length - 2; i++)
+            for (int i = 0; i < candles.Count - 2; i++)
             {
                 Candle candle = candles[i];
 
@@ -150,7 +151,19 @@ namespace strategiesFrame.Model
                 bool onlyCalculate = (candle.date.Year.ToString() != year);
 
                 foreach (FrameMachine machine in machines)
-                    machine.trade(i, onlyCalculate);
+                {
+                    try
+                    {
+                        machine.processCandleWithIndex(i, onlyCalculate);
+                    }
+                    catch (TradeSignalIgnored)
+                    {
+                    }
+
+                    if (isDayChanged(i))
+                        Console.WriteLine(ticket + ": depth: " + machine.getDepth() + "; " + candle.printDescription() +
+                            " " + candle.date + " " + DateTime.Now);
+                }
             }
 
             flushResults(year);

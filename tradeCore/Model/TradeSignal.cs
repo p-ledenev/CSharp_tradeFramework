@@ -18,7 +18,7 @@ namespace core.Model
             this.direction = direction;
         }
 
-        public static TradeSignal forClosePosition(Position.Direction direction)
+        public static TradeSignal forClosing(Position.Direction direction)
         {
             Position.Direction reverseDirection = Position.Direction.None;
 
@@ -28,7 +28,7 @@ namespace core.Model
             return new TradeSignal(reverseDirection, Trade.Mode.Close);
         }
 
-        public static TradeSignal forCloseAndOpenPosition(Position.Direction direction)
+        public static TradeSignal forClosingAndOpening(Position.Direction direction)
         {
             return new TradeSignal(direction, Trade.Mode.CloseAndOpen);
         }

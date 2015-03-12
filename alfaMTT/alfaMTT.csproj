@@ -65,15 +65,18 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Alfa\Logger.cs" />
+    <Compile Include="Alfa\TerminalOrdersProcessor.cs" />
+    <Compile Include="Settings\Logger.cs" />
+    <Compile Include="Alfa\OrderStatusObtainingFailure.cs" />
     <Compile Include="Alfa\OrderSubmissionFailure.cs" />
     <Compile Include="Alfa\TerminalGateway.cs" />
     <Compile Include="AlfaMTT.cs" />
     <Compile Include="Alfa\TerminalGatewayFailure.cs" />
+    <Compile Include="Settings\TradeLogger.cs" />
     <Compile Include="Model\TradeMachine.cs" />
     <Compile Include="Model\TradePortfolio.cs" />
-    <Compile Include="Settings\Ini.cs" />
-    <Compile Include="Model\OperateStock.cs" />
+    <Compile Include="Settings\PortfolioInitializator.cs" />
+    <Compile Include="Model\TradesProcessor.cs" />
     <Compile Include="Alfa\TerminalOrder.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

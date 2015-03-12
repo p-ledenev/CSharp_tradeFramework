@@ -10,11 +10,11 @@ namespace core.SiftCanldesStrategies
 {
     public abstract class SiftCandlesStrategy
     {
-        protected double siftStep { get; set; }
+        public double sieveParam { get; set; }
 
-        protected SiftCandlesStrategy(Double siftStep)
+        protected SiftCandlesStrategy(Double sieveParam)
         {
-            this.siftStep = siftStep;
+            this.sieveParam = sieveParam;
         }
 
         public abstract List<Candle> sift(List<Candle> values);

@@ -25,10 +25,14 @@ namespace core.Model
             return new Trade(new DateTime(), 0, 0, Position.Direction.None, 0, Mode.Close);
         }
 
-        public static Trade creatSample()
+        public static Trade createSample()
         {
             return new Trade(new DateTime(), 0, 0, Position.Direction.None, 0, Mode.CloseAndOpen);
         }
+
+        public Trade()
+        {
+            }
 
         public Trade(DateTime date, int dateIndex, double tradeValue, Position.Direction direction, int volume,
             Mode mode)
@@ -102,6 +106,11 @@ namespace core.Model
             return position.volume;
         }
 
+        public DateTime getDate()
+        {
+            return date;
+        }
+
         public double getTradeValue()
         {
             return position.tradeValue;
@@ -130,6 +139,16 @@ namespace core.Model
         public void setTradeValue(double value)
         {
             position.tradeValue = value;
+        }
+
+        public void setVolume(int volume)
+        {
+            position.volume = volume;
+        }
+
+        public bool isEarlierThan(Trade trade)
+        {
+            return date.CompareTo(trade.getDate()) < 0;
         }
     }
 }

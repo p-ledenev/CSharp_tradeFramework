@@ -1,7 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
+using System.Linq;
 using System.Threading;
+using alfaMTT.DataSources;
 using alfaMTT.Model;
 using core.Model;
 
@@ -11,40 +12,49 @@ namespace alfaMTT.Alfa
     {
         newest,
         executedPartly,
-        submissionFailed,
+        submissionStatusNotObtained,
         submissionSucceed,
         submissionBlocked,
         executionSucceed,
-        statusNotObtained,
+        executionStatusNotObtained,
         deleted
     };
 
     class TerminalOrder
     {
-        public static AlfaDirectGateway alfaDirectGateway { get; set; }
-        public static String operationFile { get; set; }
+        public static TerminalGateway terminal { get; set; }
         public static int maxCheckAttempts { get; set; }
 
         public TradeMachine machine { get; set; }
         public int orderNumber { get; set; }
         public OrderStatus status { get; set; }
         public Trade trade { get; set; }
-        public int checkAttemptsCounter { get; set; }
+        public int loadStatusAttemptsCounter { get; set; }
         public TerminalOrder parent { get; set; }
+
+        public static TerminalOrder withParent(TerminalOrder parent)
+        {
+            TerminalOrder order = new TerminalOrder(parent.machine, parent.getDirection(), parent.getVolume())
+            {
+                parent = parent
+            };
+
+            return order;
+        }
 
         public TerminalOrder()
         {
             orderNumber = 0;
             status = OrderStatus.newest;
-            trade = Trade.creatSample();
+            trade = Trade.createSample();
 
             machine = null;
             parent = null;
 
-            checkAttemptsCounter = 1;
+            loadStatusAttemptsCounter = 1;
         }
 
-        public TerminalOrder(Machine machine, Position.Direction direction, int volume)
+        public TerminalOrder(TradeMachine machine, Position.Direction direction, int volume)
             : this()
         {
             this.machine = machine;
@@ -58,177 +68,157 @@ namespace alfaMTT.Alfa
 
             trade.date = DateTime.Now;
 
-            if (isParentSubmissionBlocked()) return;
+            if (isParentSubmissionBlocked())
+                return;
 
-            if (alfaDirectGateway.loadLastValue(this) == false)
+            try
+            {
+                double value = terminal.loadLastValue(this);
+                int sign = trade.isBuy() ? 1 : -1;
+                trade.setTradeValue((1 + sign * 0.002) * value);
+            }
+            catch (TerminalGatewayFailure)
             {
                 status = OrderStatus.submissionBlocked;
                 return;
             }
 
-            if (trade.isBuy()) 
-                trade.value += 0.002 * trade.value; // открытие
-            
-            if (trade.isSell())
-                trade.value -= 0.002 * trade.value; // закрытие
-
-            // если предыдущий не завершен
-            if (!isParenetExecutionSucceed()) return;
-
-            trade.volume = (trade.volume > 0) ? trade.volume : machine.parent.lot;
-
-            if (trade.volume <= 0)
-            {
-                AlfaDirectGateway.printInfo(DateTime.Now, machine, "CreateOrder: Faild. Not enough money in Portfolio. Order volume less 0.");
-                status = OrderStatus.tenderedBlock;
-
+            if (!isParenetExecutionSucceed())
                 return;
-            }
 
-            // подать ордер
-            orderNumber = alfaDirectGateway.createOrder(this);
-
-            status = (orderNumber > 0) ? OrderStatus.tenderedSuccess : OrderStatus.tenderedFail;
-        }
-
-        public bool check()
-        {
-            // если ордер не в работе
-            if (status == OrderStatus.success) return true;
-
-            if (orderNumber <= 0) return false;
-
-            checkAttemptsCounter++;
-
-            String adResult = alfaDirectGateway.loadResultFor(this);
-            determStatusBy(adResult);
-
-            return (status == OrderStatus.success);
-        }
-
-        public void apply()
-        {
-            machine.blockBy(status);
-
-            if (isExecutionSucceed())
-                machine.execute(this);
-
-            if (!isExecutionSucceed() && orderNumber > 0)
-            {
-                bool successDrop = alfaDirectGateway.dropOrder(this, true);
-
-                if (successDrop)
-                {
-                    status = OrderStatus.deleted;
-                    machine.isBlocked = false;
-                }
-            }
-        }
-
-        public void determStatusBy(String adResult)
-        {
-            if (adResult == null)
-            {
-                status = OrderStatus.checkNotObtain;
-                return;
-            }
-
-            String[] deals = adResult.Split(new String[] { "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries);
-
-            double cValue = 0;
-            int cVolume = 0;
-            foreach (String strDeal in deals)
-            {
-                String[] deal = strDeal.Split(new char[] { '|' });
-
-                cValue += Double.Parse(deal[0]) * Int32.Parse(deal[1]);
-                cVolume += Int32.Parse(deal[1]);
-            }
-
-            if (trade.volume != cVolume)
-            {
-                String mInfo = "CheckOrder: State success. Order No " + orderNumber +
-                    " not full complete. " + cVolume + " instead " + trade.volume + ".";
-                AlfaDirectGateway.printInfo(DateTime.Now, machine, mInfo);
-
-                status = OrderStatus.executePart;
-
-                return;
-            }
-
-            trade.value = cValue / cVolume;
-            trade.volume = cVolume;
-
-            status = OrderStatus.success;
-        }
-
-        public void printStatusInfo()
-        {
-            String mInfo = null;
-            if (status == OrderStatus.newest)
-            {
-                if (parent == null || parent.status == OrderStatus.success)
-                    mInfo = "OperateStock: Can not operate stock. Not enough money.";
-                else
-                    mInfo = "OperateStock: Can not operate stock because of previose operation incomplitness.";
-
-                AlfaDirectGateway.printInfo(DateTime.Now, machine, mInfo);
-            }
-
-            if (status == OrderStatus.executePart)
-                mInfo = "OperateStock: Not full Volume for Order No " + orderNumber + ". This machine should be blocked.";
-
-            if (status == OrderStatus.checkNotObtain)
-                mInfo = "OperateStock: No status available for Order No " + orderNumber + ". This machine should be blocked.";
-
-            if (status == OrderStatus.tenderedFail)
-                mInfo = "OperateStock: Can not create order. This machine should be blocked.";
-
-            if (status == OrderStatus.tenderedBlock)
-                mInfo = "OperateStock: Can not create order. This machine continue working";
-
-            if (status == OrderStatus.deleted)
-                mInfo = "OperateStock: Order No " + orderNumber + " was deleted. This machine continue working";
-
-            if (mInfo != null)
-                AlfaDirectGateway.printInfo(DateTime.Now, machine, mInfo);
-
-            StreamWriter file = null;
             try
             {
-                file = new StreamWriter(OperateStock.path + operationFile, true);
+                orderNumber = terminal.submitOrder(this);
+                status = OrderStatus.submissionSucceed;
             }
-            catch (Exception e)
+            catch (OrderSubmissionFailure)
             {
-                AlfaDirectGateway.printInfo(DateTime.Now, "pInfoADOrder: " + e.Message);
-                Environment.Exit(0);
+                status = OrderStatus.submissionStatusNotObtained;
             }
-
-            Trade trade = new Trade(this);
-            file.WriteLine(trade.tradeString());
-            file.Close();
-
-            mInfo = "OperateStock: " + this.trade.mode + " " + this.trade.value + " " + this.trade.volume;
-            AlfaDirectGateway.printInfo((this.trade.dt != DateTime.MinValue) ? this.trade.dt : DateTime.Now, machine, mInfo, (status == OrderStatus.success) ? true : false);
-        }
-
-        public void printOrder()
-        {
-            if (machine != null)
+            catch (TerminalGatewayFailure)
             {
-                Console.WriteLine(machine.id + " " + machine.parent.ticket + " " +
-                    machine.strategie.getName() + " " + machine.strategie.getParam() + " " + trade.mode);
             }
         }
 
-        public bool allowExecute()
+        public void loadStatus()
         {
-            // если не исполнен, не удален, не неуспешно подан; если предшествующего нет или он исполнен; количество попыток проверки не превышено
-            return (!isExecutionSucceed() && !isDeleted() && !isSubmissionFailed() && !isSubmissionBlocked() &&
-                isParenetExecutionSucceed() && !isExeededMaxCheckAttemts());
+            loadStatusAttemptsCounter++;
+
+            try
+            {
+                String result = terminal.obtainStatusFor(this);
+
+                String[] deals = result.Split(new[] { "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries);
+
+                double value = 0;
+                int volume = 0;
+                foreach (String strDeal in deals)
+                {
+                    String[] deal = strDeal.Split('|');
+
+                    value += Double.Parse(deal[0]) * Int32.Parse(deal[1]);
+                    volume += Int32.Parse(deal[1]);
+                }
+
+                if (trade.getVolume() != volume)
+                {
+                    String mInfo = "CheckOrder: State success. Order No " + orderNumber +
+                        " not full complete. " + volume + " instead " + trade.getVolume() + ".";
+                    Logger.printInfo(DateTime.Now, machine, mInfo);
+
+                    status = OrderStatus.executedPartly;
+
+                    return;
+                }
+
+                trade.setTradeValue(value / volume);
+                trade.setVolume(volume);
+
+                status = OrderStatus.executionSucceed;
+            }
+            catch (OrderStatusObtainingFailure)
+            {
+                status = OrderStatus.executionStatusNotObtained;
+            }
+            catch (TerminalGatewayFailure)
+            {
+            }
         }
 
-        public bool hasSameTicketWith(TerminalOrder order)
+        public void validateStatus()
+        {
+            if (shouldBeBlocked())
+                machine.isBlocked = true;
+
+            if (!shouldBeDeleted())
+                return;
+
+            try
+            {
+                terminal.dropOrder(this);
+
+                status = OrderStatus.deleted;
+                machine.isBlocked = false;
+            }
+            catch (TerminalGatewayFailure)
+            {
+            }
+        }
+
+        public void logStatus()
+        {
+            String message = null;
+            if (status == OrderStatus.newest)
+                message = isParenetExecutionSucceed()
+                    ? "OperateStock: Can not execute order. Not enough money."
+                    : "OperateStock: Can not execute order. Parent order not success.";
+
+            if (status == OrderStatus.executedPartly)
+                message = "OperateStock: Order No " + orderNumber + " executed partly. This machine should be blocked.";
+
+            if (status == OrderStatus.executionStatusNotObtained)
+                message = "OperateStock: Order No " + orderNumber + " status not obtained. This machine should be blocked.";
+
+            if (status == OrderStatus.submissionStatusNotObtained)
+                message = "OperateStock: Can not create order. Order Id was not obtained during submission. This machine should be blocked.";
+
+            if (status == OrderStatus.submissionBlocked)
+                message = "OperateStock: Can not create order. Order submission blocked. This machine continue working";
+
+            if (status == OrderStatus.deleted)
+                message = "OperateStock: Order No " + orderNumber + " was deleted. This machine continue working";
+
+            if (status == OrderStatus.executionSucceed)
+                message = "OperateStock: " + printOrder() + " succeed";
+
+            if (message != null)
+                Logger.printInfo(DateTime.Now, machine, message);
+
+            TradeLogger logger = new TradeLogger();
+            logger.writeOrder(this);
+        }
+
+        public String printOrder()
+        {
+            return machine.id + " " + machine.getTicket() + " " + machine.getDecisionStrategyName() + " " +
+                machine.getDepth() + " " + trade.getDirection() + " " + trade.getTradeValue() + " " + trade.getVolume();
+        }
+
+        public bool allowExecution()
+        {
+            if (!isParenetExecutionSucceed())
+                return false;
+
+            if (shouldBeBlocked() || isExecutionSucceed())
+                return false;
+
+            if (isMaxCheckAttemtsExeeded())
+                return false;
+
+            return true;
+        }
+
+        public bool hasSameTicketAs(TerminalOrder order)
         {
             return (order.machine.getTicket().Equals(machine.getTicket()));
         }
@@ -245,7 +235,7 @@ namespace alfaMTT.Alfa
 
         public bool isSubmissionFailed()
         {
-            return status == OrderStatus.submissionFailed;
+            return status == OrderStatus.submissionStatusNotObtained;
         }
 
         public bool isSubmissionBlocked()
@@ -253,9 +243,29 @@ namespace alfaMTT.Alfa
             return status == OrderStatus.submissionBlocked;
         }
 
+        public bool isSubmissionSucceed()
+        {
+            return status == OrderStatus.submissionSucceed;
+        }
+
         public bool isExecutionSucceed()
         {
             return status == OrderStatus.executionSucceed;
+        }
+
+        public bool shouldBeDeleted()
+        {
+            OrderStatus[] faildStatuses = { OrderStatus.executedPartly, OrderStatus.executionStatusNotObtained };
+
+            if (Array.IndexOf(faildStatuses, status) > -1)
+                return true;
+
+            return false;
+        }
+
+        public bool shouldBeBlocked()
+        {
+            return (shouldBeDeleted() || OrderStatus.submissionStatusNotObtained.Equals(status));
         }
 
         public bool isDeleted()
@@ -273,107 +283,48 @@ namespace alfaMTT.Alfa
             return (parent != null && parent.status == OrderStatus.submissionBlocked);
         }
 
-        public bool isExeededMaxCheckAttemts()
+        public bool isMaxCheckAttemtsExeeded()
         {
-            return checkAttemptsCounter > maxCheckAttempts;
+            return loadStatusAttemptsCounter > maxCheckAttempts;
         }
 
-        public void opositeOrder(TerminalOrder order)
+        public void executeAsOposite(TerminalOrder order)
         {
-            this.trade.dt = DateTime.Now;
-            order.trade.dt = this.trade.dt;
+            trade.date = DateTime.Now;
+            order.setDate(trade.date);
 
             Console.WriteLine("Oposite Orders: ");
-            this.printOrder();
-            order.printOrder();
+            Console.WriteLine(printOrder());
+            Console.WriteLine(order.printOrder());
 
-            // получить цену последней сделки
-            if (!alfaDirectGateway.loadLastValue(this))
+            Console.WriteLine("Check oposite orders volume.");
+            if (!hasSameVolume(order))
             {
-                alfaDirectGateway.loadLastValue(order);
-
-                status = OrderStatus.tenderedBlock;
-                order.status = OrderStatus.tenderedBlock;
-
+                Console.WriteLine("Opposite execution fail. Volumes not equal");
                 return;
             }
 
-            trade.volume = (trade.volume > 0) ? trade.volume : machine.parent.lot;
-
-            order.trade.value = trade.value;
-            order.trade.volume = (order.trade.volume > 0) ? order.trade.volume : order.machine.parent.lot;
-
-            // взаимозасчитывать только при совпадении объемов
-            Console.WriteLine("Check oposite orders volume.");
-            if (trade.volume == order.trade.volume)
+            double value;
+            try
             {
-                this.status = OrderStatus.success;
-                order.status = OrderStatus.success;
-
-                Console.WriteLine("Opposite execution success");
+                value = terminal.loadLastValue(this);
             }
-            else
+            catch (TerminalGatewayFailure e)
             {
-                // сбросить цену
-                order.set(order.machine, order.trade.mode, order.machine.heap.volume);
-                this.set(this.machine, this.trade.mode, this.machine.heap.volume);
+                status = OrderStatus.submissionBlocked;
+                order.status = OrderStatus.submissionBlocked;
 
-                Console.WriteLine("Opposite execution fail. Volumes not equal");
-            }
-        }
-
-        public static void opositeOrders(List<TerminalOrder> cOrds)
-        {
-            foreach (TerminalOrder order in cOrds)
-                foreach (TerminalOrder oposit in cOrds)
-                    if (order.hasSameTicketWith(oposit) && order.hasOpositPositionWith(oposit) &&
-                        order.isNewest() && oposit.isNewest() &&
-                        order.isParenetExecutionSucceed() && oposit.isParenetExecutionSucceed())
-                    {
-                        order.opositeOrder(oposit);
-                    }
-        }
-
-        public static bool hasOrdersToExecute(List<TerminalOrder> orders)
-        {
-            foreach (TerminalOrder order in orders)
-                if (order.allowExecute())
-                    return true;
-
-            return false;
-        }
-
-        public static bool executeOrders(List<TerminalOrder> orders)
-        {
-            bool successExecute = false;
-
-            // учесть взаимопротивоположные заявки
-            Console.WriteLine("Try do execute Oposite Orders.");
-            opositeOrders(orders);
-
-            Console.WriteLine("Try do execute all other Orders.");
-            while (hasOrdersToExecute(orders))
-            {
-                // подать заявки
-                bool m = createOrders(orders);
-
-                if (m) Thread.Sleep(11 * 1000);
-
-                // проверить исполнение ордеров 
-                successExecute = checkOrders(orders);
-
-                Thread.Sleep(2 * 1000);
+                Console.WriteLine("Opposite execution blocked");
+                return;
             }
 
-            // применить ордера к портфелям
-            applyOrders(orders);
+            setTradeValue(value);
+            order.setTradeValue(value);
 
-            // записать р-ты операций
-            printOrdersInfo(orders);
+            status = OrderStatus.executionSucceed;
+            order.status = OrderStatus.executionSucceed;
 
-            Thread.Sleep(3 * 1000);
-
-            return successExecute;
+            Console.WriteLine("Opposite execution succeed");
         }
 
         public String getTicket()
@@ -386,7 +337,12 @@ namespace alfaMTT.Alfa
             return machine.getAccount();
         }
 
-        public String getDirection()
+        public Position.Direction getDirection()
+        {
+            return trade.getDirection();
+        }
+
+        public String getTerminalDirection()
         {
             if (trade.position.isBuy())
                 return "Buy";
@@ -397,9 +353,24 @@ namespace alfaMTT.Alfa
             return "None";
         }
 
+        public bool hasSameVolume(TerminalOrder order)
+        {
+            return getVolume() == order.getVolume();
+        }
+
         public int getVolume()
         {
             return trade.getVolume();
+        }
+
+        public Trade.Mode getMode()
+        {
+            return trade.mode;
+        }
+
+        public void setVolume(int volume)
+        {
+            trade.setVolume(volume);
         }
 
         public double getTradeValue()
@@ -407,38 +378,34 @@ namespace alfaMTT.Alfa
             return trade.getTradeValue();
         }
 
-        public static void printOrdersInfo(List<TerminalOrder> orders)
+        public void setTradeValue(double value)
         {
-            Console.WriteLine("Try to write Orders results.");
-            foreach (TerminalOrder order in orders)
-                order.printStatusInfo();
+            trade.setTradeValue(value);
         }
 
-        public static bool createOrders(List<TerminalOrder> orders)
+        public void setDate(DateTime date)
         {
-            bool m = false;
-            foreach (TerminalOrder order in orders)
-            {
-                order.submit();
-                if (order.status == OrderStatus.tenderedSuccess) m = true;
-            }
-
-            return m;
+            trade.date = date;
         }
 
-        public static bool checkOrders(List<TerminalOrder> orders)
+        public void setMode(Trade.Mode mode)
         {
-            bool m = false;
-            foreach (TerminalOrder order in orders)
-                if (order.check()) m = true;
-
-            return m;
+            trade.mode = mode;
         }
 
-        public static void applyOrders(List<TerminalOrder> orders)
+        public bool isCloseAndOpenPosition()
         {
-            foreach (TerminalOrder order in orders)
-                order.apply();
+            return trade.isCloseAndOpenPosition();
+        }
+
+        public DateTime getDate()
+        {
+            return trade.getDate();
+        }
+
+        public void applayToMachine()
+        {
+            machine.applyTerminalOrder(this);
         }
     }
 }

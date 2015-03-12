@@ -30,15 +30,15 @@ namespace core.DecisionMakingStrategies
             Position.Direction lastDirection = machine.getLastOpenPositionTrade().getDirection();
 
             if (!direction.Equals(lastDirection))
-                return TradeSignal.forCloseAndOpenPosition(direction);
+                return TradeSignal.forClosingAndOpening(direction);
 
             if (takeProfitStrategy.shouldTakeProfit(start))
-                return TradeSignal.forClosePosition(direction);
+                return TradeSignal.forClosing(direction);
 
             if (takeProfitStrategy.shouldReopenPosition(start))
-                return TradeSignal.forCloseAndOpenPosition(direction);
+                return TradeSignal.forClosingAndOpening(direction);
 
-            return TradeSignal.forClosePosition(Position.Direction.None);
+            return TradeSignal.forClosing(Position.Direction.None);
         }
 
         public abstract String getName();

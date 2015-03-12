@@ -21,7 +21,7 @@ namespace core.DecisionMakingStrategies
         protected override Position.Direction determineTradeDirection(int start)
         {
             ApproximationConstructor constructor = ApproximationConstructorFactory.createConstructor();
-            Approximation ap = constructor.approximate(machine.getCandles(), start, machine.depth);
+            Approximation ap = constructor.approximate(machine.getCandlesArray(), start, machine.depth);
 
             approximations[start] = ap;
 
@@ -43,7 +43,7 @@ namespace core.DecisionMakingStrategies
 
         protected override void init()
         {
-            approximations = new Approximation[machine.portfolio.candles.Length];
+            approximations = new Approximation[machine.getCandles().Count];
 
             for (int i = 0; i < approximations.Length; i++)
                 approximations[i] = new Approximation();

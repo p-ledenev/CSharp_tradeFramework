@@ -6,26 +6,26 @@ using core.Model;
 
 namespace alfaMTT.Alfa
 {
-    class AlfaDirectGateway
+    class TerminalGateway
     {
-        public static TimeSpan tradeFrom { get; set; }
-        public static TimeSpan tradeTo { get; set; }
-
-        public AlfaDirect AD { get; set; }
+        public static TimeSpan tradeFrom =  new TimeSpan(10, 0, 0);
+        public static TimeSpan tradeTo = new TimeSpan(23, 45, 0);
+        
+        public AlfaDirect connector { get; set; }
         public String login { get; set; }
         public String password { get; set; }
 
-        public AlfaDirectGateway(String login, String password)
+        public TerminalGateway(String login, String password)
         {
             this.login = login;
             this.password = password;
 
-            setAD();
+            setConnector();
         }
 
-        private void setAD()
+        private void setConnector()
         {
-            AD = new AlfaDirect
+            connector = new AlfaDirect
             {
                 UserName = login,
                 Password = password,
@@ -36,16 +36,16 @@ namespace alfaMTT.Alfa
         public void checkConnect()
         {
             bool isLost = false;
-            if (AD == null || !AD.Connected)
+            if (connector == null || !connector.Connected)
             {
                 isLost = true;
                 Logger.printInfo(DateTime.Now, "CheckConnect: Connection to AlfaDirect is lost");
             }
 
-            while (AD == null || !AD.Connected)
+            while (connector == null || !connector.Connected)
             {
                 Thread.Sleep(10 * 1000);
-                setAD();
+                setConnector();
 
                 Thread.Sleep(10 * 1000);
             }
@@ -58,12 +58,12 @@ namespace alfaMTT.Alfa
         {
             checkConnect();
 
-            AD.DropOrder(order.orderNumber, null, null, null, null, null, 3);
+            connector.DropOrder(order.orderNumber, null, null, null, null, null, 3);
 
             if (!isLastADOperationSucceed("DropOrder", order, false))
                 throw new TerminalGatewayFailure();
 
-            String resultMessage = AD.LastResultMsg;
+            String resultMessage = connector.LastResultMsg;
 
             Logger.printInfo(DateTime.Now, order.machine, "DropOrder: State success. " + resultMessage + (resultMessage == null ? " No result recieved." : ""), toScreen);
 
@@ -75,7 +75,7 @@ namespace alfaMTT.Alfa
         {
             checkConnect();
 
-            String lastValue = AD.GetLocalDBData("fin_info", "last_price, status", "p_code in (\"" + order.getTicket() + "\")");
+            String lastValue = connector.GetLocalDBData("fin_info", "last_price, status", "p_code in (\"" + order.getTicket() + "\")");
 
             if (!isLastADOperationSucceed("LoadLastValue", order))
                 throw new TerminalGatewayFailure();
@@ -97,19 +97,19 @@ namespace alfaMTT.Alfa
             return Double.Parse(data[0]);
         }
 
-        public String loadResultFor(TerminalOrder order)
+        public String obtainStatusFor(TerminalOrder order)
         {
             checkConnect();
 
-            String result = AD.GetLocalDBData("trades", "price, qty", "ord_no = " + order.orderNumber);
+            String result = connector.GetLocalDBData("trades", "price, qty", "ord_no = " + order.orderNumber);
 
             if (isLastADOperationSucceed("CheckOrder", order))
                 throw new TerminalGatewayFailure();
 
-            Logger.printInfo(DateTime.Now, order.machine, "CheckOrder: State success. " + AD.LastResultMsg + (result == null ? " No result recieved." : ""));
+            Logger.printInfo(DateTime.Now, order.machine, "CheckOrder: State success. " + connector.LastResultMsg + (result == null ? " No result recieved." : ""));
 
             if (result == null)
-                throw new TerminalGatewayFailure();
+                throw new OrderStatusObtainingFailure();
 
             return result;
         }
@@ -118,15 +118,15 @@ namespace alfaMTT.Alfa
         {
             checkConnect();
 
-            int orderNo = AD.CreateLimitOrder(order.getAccount(), "FORTS", order.getTicket(),
-                                  DateTime.Now.AddDays(1), "", "RUR", order.getDirection(), order.getVolume(),
+            int orderNo = connector.CreateLimitOrder(order.getAccount(), "FORTS", order.getTicket(),
+                                  DateTime.Now.AddDays(1), "", "RUR", order.getTerminalDirection(), order.getVolume(),
                                   order.getTradeValue(), null, null, null, null, null, null, null, null, null,
                                   null, null, null, null, null, null, null, 11);
 
             if (isLastADOperationSucceed("CreateOrder", order))
                 throw new TerminalGatewayFailure();
 
-            Logger.printInfo(DateTime.Now, order.machine, "CreateOrder: State success. " + AD.LastResultMsg +
+            Logger.printInfo(DateTime.Now, order.machine, "CreateOrder: State success. " + connector.LastResultMsg +
                 (orderNo <= 0 ? " No result recieved. Machine will be blocked." : ""));
 
             if (orderNo <= 0)
@@ -144,7 +144,7 @@ namespace alfaMTT.Alfa
             6 – 1 day; 7 – 1 week; 8 – 1 month; 9 – 1 year.
             */
 
-            String result = AD.GetArchiveFinInfo("FORTS", ticket, 0, dateFrom, dateTo, 3, 20);
+            String result = connector.GetArchiveFinInfo("FORTS", ticket, 0, dateFrom, dateTo, 3, 20);
 
             Console.WriteLine(ticket + " (" + dateFrom + "-" + dateTo + ") read data " + DateTime.Now.ToString("dd.MM.yyyy HH:mm:ss"));
 
@@ -158,14 +158,14 @@ namespace alfaMTT.Alfa
         {
             checkConnect();
 
-            String result = AD.GetLocalDBData("balance", "real_rest", "acc_code in (\"" + account + "\") and p_code in (\"" + ticket + "\")");
+            String result = connector.GetLocalDBData("balance", "real_rest", "acc_code in (\"" + account + "\") and p_code in (\"" + ticket + "\")");
 
             if (isLastADOperationSucceed("loadTicketVolume"))
                 throw new TerminalGatewayFailure();
 
             if (result == null)
             {
-                Logger.printInfo(DateTime.Now, "loadTicketVolume: " + AD.LastResultMsg + " " + (AD.LastResultMsg == null ? "No message recieved" : ""));
+                Logger.printInfo(DateTime.Now, "loadTicketVolume: " + connector.LastResultMsg + " " + (connector.LastResultMsg == null ? "No message recieved" : ""));
                 throw new TerminalGatewayFailure();
             }
 
@@ -198,7 +198,7 @@ namespace alfaMTT.Alfa
 
         protected bool isLastADOperationSucceed(String operation, TerminalOrder order, bool toScreen = true)
         {
-            if (AD.LastResult == StateCodes.stcSuccess)
+            if (connector.LastResult == StateCodes.stcSuccess)
                 return true;
 
             String message = operation + ": " + getLastOperationMessage();
@@ -210,7 +210,7 @@ namespace alfaMTT.Alfa
 
         protected bool isLastADOperationSucceed(String operation, bool toScreen = true)
         {
-            if (AD.LastResult == StateCodes.stcSuccess)
+            if (connector.LastResult == StateCodes.stcSuccess)
                 return true;
 
             String mInfo = operation + ": " + getLastOperationMessage();
@@ -223,8 +223,8 @@ namespace alfaMTT.Alfa
         protected String getLastOperationMessage()
         {
             String message;
-            if (AD.LastResultMsg != null)
-                message = "State not success. " + AD.LastResultMsg;
+            if (connector.LastResultMsg != null)
+                message = "State not success. " + connector.LastResultMsg;
             else
                 message = "State not success. No message.";
 
